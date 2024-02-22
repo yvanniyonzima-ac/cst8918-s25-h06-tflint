@@ -1,217 +1,121 @@
 CST8918 - DevOps: Infrastructure as Code  
 Prof: Robert McKenney
 
-# LAB-A05 Terraform Web Server
+# Hybrid-H06 TFLint
 
 ## Background
-This hands-on lab activity will explore using Terraform to deploy a simple web server on Azure.
+
+Building on last week's lab, you will add a linter to your Terraform project. This will help you catch errors and enforce best practices in your Terraform code. We will be using TFLint.
+
+### What is a linter?
+
+A linter is a tool that analyses source code to flag programming errors, bugs, stylistic errors, and suspicious constructs. The name is derived from the name of the utility, _lint_ for the C language, which was named after the bits of fluff and dirt that collect in the fibers of clothing. Equivalent tools have been created for many other languages (e.g. ESLint for Javascript/TypeScript).
+
+TFLint is a **static analysis tool** for Terraform modules. It checks your Terraform code for errors and best practices. This lab will guide you through the installation and configuration of TFLint and show you how to use it to improve your Terraform modules.
+
+### Why use TFLint?
+
+- **Consistency**: enforce best practices and coding standards across your Terraform modules.
+- **Quality**: catch errors and potential issues before they become problems.
+- **Security**: help avoid common security pitfalls in your infrastructure code.
+- **Efficiency**: integrate linters into your CI/CD pipeline to automate code quality checks.
 
 ### Prerequisites
-You will need the following tools installed locally on your laptop before you begin.
 
-- git
-- Azure CLI
-- Terraform CLI
-- an SSH key pair
+Fork and clone this repository to your local machine. You will need to have Terraform and Go installed. You will also need to have the Azure CLI installed and be logged in to your Azure account.
 
-### Reference
-- The main [Terraform documentation](https://developer.hashicorp.com/terraform/docs)
-- The [AzureRM Terraform Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs) documentation
-- The [Azure](https://learn.microsoft.com/en-us/azure) public cloud documentation
+> [!TIP]
+> Don't forget to run `terraform init` in the top level project folder to download the AzureRM provider plugin.
 
-### Scenario
-You are the sole DevOps engineer at a small professional services company. They have a small web application that runs a on a single server in the office.  Anticipating traffic growth as the company expands they want to move the web server to the cloud. Azure has been selected as the public cloud provider.
+## Installation
 
-Knowing that the complexity of the solution architecture will increase over time and the number of managed resources will grow as well, you want to "start on the right foot" by using Terraform to manage these infrastructure resources.As a first step you will create a simple web server on the latest supported version of Ubuntu linux. That server should be publicly accessible by both SSH and HTTP.
+See the [official GitHub repo README file](https://github.com/terraform-linters/tflint?tab=readme-ov-file#installation) for all installation options. The most common are ...
 
-You will expand on this scenario later, but start with this basic setup.
+**Bash script (Linux):**
 
-## Instructions
-### 1. Create an architecture diagram
-Review the scenario and create an architecture diagram for your proposed solution.
-
-### 2. Create the project scaffolding
-- create a new project folder called `cst8918-w24-A05-<your-username>`
-- create a `.gitignore` file in that folder with the following content
-```
-# This is a minimal list, OK to add things per repo
-# mac specific
-.DS_Store
-.ansible
-.azure/
-.bash_history
-# don't check storage creds into GH
-.boto
-.cache
-*.code-workspace
-#  may contain gcloud files
-.config
-.gitconfig
-.local
-# .netrc contains secrets for service tokens
-.netrc
-*.plan
-.sentinel
-# .ssh dir may contain private keys
-.ssh
-.terrascan
-# Terraform dot files
-.terraform
-.terraformrc
-**/.terraform/*
-.terraform.d
-*.tfstate
-*.tfstate.*
-.vscode
-.idea
-.idea
-```
-
-- using the terminal, run `git init` in the project folder
-- using the terminal, run `touch main.tf` to create the file that will contain your Terraform definitions
-- make your initial git commit
 ```sh
-git add .
-git commit -m "initial commit"
+curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 ```
 
-As you complete each section below you should create a new git commit with a succinct but descriptive message.
+**Homebrew (macOS):**
 
-### 3. Define required Terraform providers
-The first block in your `main.tf` file should define the minimum version of Terraform plus any required provider modules. For this project you will need the `azurerm` and `cloudinit` providers.
+```sh
+brew install tflint
+```
 
-```tf
-# Configure the Terraform runtime requirements.
-terraform {
-  required_version = ">= 1.1.0"
+**Chocolatey (Windows):**
 
-  required_providers {
-    # Azure Resource Manager provider and version
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0.2"
-    }
-    cloudinit = {
-      source  = "hashicorp/cloudinit"
-      version = "2.3.3"
-    }
-  }
+```sh
+choco install tflint
+```
+
+## Configuration
+
+### Default Rule set
+
+TFLint uses the same Hashicorp Configuration Language (HCL) structure as your Terraform modules. Create a `.tflint.hcl` file with the following content.
+
+```hcl
+plugin "terraform" {
+  enabled = true
+  preset  = "recommended"
 }
+```
 
-# Define providers and their config params
-provider "azurerm" {
-  # Leave the features block empty to accept all defaults
-  features {}
+This enables the recommended best practice rules. The [documentation provides a quick check list](https://github.com/terraform-linters/tflint-ruleset-terraform/blob/main/docs/rules/README.md) of the rules included in the "recommended" preset and links to each rule's more detailed explanation.
+
+To enable a more strict set of rules, change the preset in your `.tflint.hcl` to **all**.
+
+### Rule set for the AzureRM Provider
+
+Each of the main public cloud providers has a TFLint rule set extension for the unique features of that Terraform provider module. We need the one for the [AzureRM Provider](https://github.com/terraform-linters/tflint-ruleset-azurerm). There are over 200 rules in this rule set. Be sure to review the documentation.
+
+Add this block to your `.tflint.hcl` file.
+
+```hcl
+plugin "azurerm" {
+  enabled = true
+  version = "0.25.1"
+  source  = "github.com/terraform-linters/tflint-ruleset-azurerm"
 }
+```
 
-provider "cloudinit" {
-  # Configuration options
+You can now run `tflint --init` from your project folder in the terminal to install the required rule sets.
+
+## Test it out
+
+Once everything is configured, you can run `tflint` in the terminal to see what it reports. Using the **recommended** preset, you should see a single warning ...
+
+```sh
+❯ tflint
+1 issue(s) found:
+
+Warning: `region` variable has no type (terraform_typed_variables)
+
+  on variables.tf line 7:
+   7: variable "region" {
+
+Reference: https://github.com/terraform-linters/tflint-ruleset-terraform/blob/v0.5.0/docs/rules/terraform_typed_variables.md
+```
+
+The warning message clearly identifies the error type and location. If you need further explanation of the error, follow the _Reference_ link to the ruleset documentation.
+
+In this case, the error is that the `region` variable in `variables.tf` does not have a type. This is a best practice to ensure that the variable is used correctly in the module. The fix is to add a type to the variable definition.
+
+```hcl
+variable "region" {
+  type    = string
+  default = "westus3"
 }
-
 ```
 
-#### Initialize Terraform
-You should now run `terraform init` in the terminal. Terraform will validate your code and attempt to install the referenced provider modules. If any errors are reported, read them carefully to resolve the conflict -- usually a typo in a name.
+## Lab Tasks
 
-### 4. Define resources
-With the basic setup complete, you can define the specific resources from your architecture diagram.
-
-#### 4.1 Variables
-It will be helpful to define a few variables that can be used consistently in the definition of other resources. These variables can have default values (or not) and can be overridden at runtime on the CLI. You will need:
-- labelPrefix
-- region
-- admin_username
-
-
-#### 4.2 Resource Group
-Define a resource group to logically contain all of the resources for this project. The name argument should be `"${var.labelPrefix}-A05-RG"`
-
-
-#### 4.3 Public IP Address
-From the architecture diagram, the first peer resource in the resource group is the public IP address.
-
-
-#### 4.4 Virtual Network
-Next you will need an Azure virtual network (VNet) with a CIDR range of `10.0.0.0/16`.
-
-
-#### 4.5 Subnet
-Within the VNet, you will need to define a subnet with the CIDR range of `10.0.1.0/24`.
-
-
-#### 4.6 Security Group
-The solution architecture design requires both SSH and HTTP access to the web server VM. The AzureRM provider allows for either defining security group rules as separate resources, or inlining them in the definition of the security group resource. Since we only have two rules to add, the inline approach will be preferable.
-
-#### 4.7 Virtual Network Interface Card (NIC)
-The virtual machine will need a NIC that is connected to the public IP address.
-
-
-#### 4.8 Apply the security group
-You could apply the security group rules to the whole subnet, or just to the web server. Since the rules that we defined are specific to the web server and may not be appropriate for other VMs that we put in the subnet, let's choose the second option.
-
-
-#### 4.9 Init Script
-When the virtual machine is deployed, it will be a base Ubuntu server image. You will need to install the web server application on it. We will use apache for this. The **cloudinit** provider will let you define a shell script to run on the VM after the first boot. 
-
-Create a new file in your project folder called `init.sh` with these three lines of code.
-
-```sh
-#!/bin/bash
-sudo apt-get update
-sudo apt-get install -y apache2
-
-```
-
-Now define a **data** resource using the `cloudinit_config` resource type.  You will use this resource when defining the VM in the next step.
-
-
-#### 4.10 Virtual Machine
-You have all of the dependency resources defined and you can now define the web server virtual machine. Don't forget to include your SSH public key in the definition. Since this is a test deployment and not yet production, you should use a cheaper **B1s** sized VM.
-
-#### Output Values
-The resource definitions are now complete, but it would be nice to know how to validate the deployment. You will want to output a few essential values from the deployment:
-- resource group name
-- public IP address
-
-
-### 5. Deploy and Verify
-#### 5.1 Deploy
-> Use your college username when prompted for the _labelPrefix_ variable.
-
-```sh
-terraform apply
-
-var.labelPrefix
-  Your college username. This will form the beginning of various resource names.
-
-  Enter a value:
-```
-The Terraform CLI will parse your resource definitions and make sure that there are no syntax errors. If there are any, they will be displayed in red in your terminal. Correct them and try again.
-
-Once everything is green, Terraform will display the planned changes. Type `yes` when prompted to deploy.
-
-#### 5.2 Verify
-Once the deploy completes, you should see the two output values that you defined in your terminal.  
-- Use the resource group to visually inspect the resources in the Azure portal.
-- Copy the public IP address into a browser to see the default Apache web page.
-- Open a remote SSH session to the VM
-```sh
-ssh azureadmin@<public_ip_address>
-```
-
-## Demo/Submit
-### Publish your project to GitHub
-- create a new public remote repo on GitHub
-- add the new GitHub repo as a remote on your local repo
-- push your commits
-
-### Brightspace
-Submit a link to your GitHub repo URL in the Brightspace assignment. The repo should include all of your Terraform project files and an image file with your architecture diagram from step 1, called `a05-architecture.png`
-
-## Clean up
-Once you completed all of the tasks above, remember to clean-up any Azure resources that are no longer required.
-```sh
-terraform destroy
-```
-
-> Use your college username when prompted for the _labelPrefix_ variable.
+1. Create a new git branch called `tflint`.
+2. Change the Terraform preset from `recommended` to `all`.
+3. Correct all reported issues.
+4. Make sure that the **Terratest** conditions are still passing.
+   > [!IMPORTANT]
+   > Don't forget to update the _subscriptionID_ and _labelPrefix_ variables in the test file.
+5. Make a git commit and push your branch to GitHub.
+6. Submit your GitHub repo's URL on Brightspace.
